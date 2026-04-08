@@ -1,0 +1,17 @@
+README.md
+pyproject.toml
+src/__init__.py
+src/analysis.py
+src/cli.py
+src/generators.py
+src/processing.py
+src/viz.py
+src/artificial_data_generation.egg-info/PKG-INFO
+src/artificial_data_generation.egg-info/SOURCES.txt
+src/artificial_data_generation.egg-info/dependency_links.txt
+src/artificial_data_generation.egg-info/requires.txt
+src/artificial_data_generation.egg-info/top_level.txt
+tests/test_analysis.py
+tests/test_generators.py
+tests/test_placeholder.py
+tests/test_processing.py
