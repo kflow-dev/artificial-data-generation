@@ -1,6 +1,0 @@
-__init__
-analysis
-cli
-generators
-processing
-viz

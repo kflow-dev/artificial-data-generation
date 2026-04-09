@@ -1,0 +1,50 @@
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.python-version
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Packaging / build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Jupyter
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/
+
+# Notebook outputs / generated artifacts
+*.nbconvert.ipynb
+
+# Environment / secrets
+.env
+.env.*
+
+# Project-generated artifacts
+# Keep one checked-in sample dataset for demonstration, ignore newly generated outputs.
+data/synthetic/*.csv
+data/synthetic/*.png
+!data/synthetic/data.csv
+
+# Notebook execution/export artifacts
+notebooks/.executed/
+notebooks/python/

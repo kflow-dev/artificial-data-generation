@@ -1,8 +1,0 @@
-numpy
-pandas
-scikit-learn
-pymc
-click
-matplotlib
-seaborn
-scipy

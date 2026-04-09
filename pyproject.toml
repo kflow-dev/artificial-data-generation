@@ -1,14 +1,45 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "artificial-data-generation"
 version = "0.1.0"
-description = "Professional Bayesian Synthetic Data Generation Framework"
-dependencies = [
-    "numpy", "pandas", "scikit-learn", "pymc", "click", "matplotlib", "seaborn", "scipy"
+description = "Notebook-first synthetic data generation and Bayesian data quality workflow"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "AAIF / Data Services Portfolio" }
 ]
+dependencies = [
+  "numpy>=1.24.3",
+  "pandas>=2.0.3",
+  "scikit-learn>=1.3.0",
+  "pymc>=5.4.0",
+  "click>=8.1.7",
+  "matplotlib>=3.7.1",
+  "seaborn>=0.12.2",
+  "scipy>=1.11.1",
+  "pytest>=7.4.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.4.0"
+]
+notebooks = [
+  "jupyterlab>=4.0.0"
+]
+
+[project.scripts]
+artificial-data-generation = "src.cli:cli"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

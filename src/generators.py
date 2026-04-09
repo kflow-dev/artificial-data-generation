@@ -1,46 +1,93 @@
+from abc import ABC, abstractmethod
+
 import numpy as np
 import pandas as pd
-from abc import ABC, abstractmethod
+
+from .workflows import add_vip_status
+
 
 class BaseGenerator(ABC):
     @abstractmethod
     def generate(self, samples: int, **kwargs) -> pd.DataFrame:
         pass
 
+
 class RandomGenerator(BaseGenerator):
-    """Basic stochastic generation using independent distributions."""
+    """Generate independent but business-facing VIP customer features."""
+
     def generate(self, samples: int, **kwargs) -> pd.DataFrame:
-        data = {
-            'feature_a': np.random.normal(0, 1, samples),
-            'feature_b': np.random.exponential(1, samples),
-            'feature_c': np.random.poisson(5, samples)
-        }
-        return pd.DataFrame(data)
+        random_state = kwargs.get("random_state")
+        rng = np.random.default_rng(random_state)
+        credit_score = np.clip(rng.normal(700, 65, samples), 300, 850)
+        frequency = rng.poisson(10, samples)
+        avg_transaction = np.clip(rng.lognormal(mean=3.5, sigma=0.55, size=samples), 5, None)
+        df = pd.DataFrame(
+            {
+                "avg_transaction": avg_transaction.round(2),
+                "frequency": frequency.astype(int),
+                "credit_score": credit_score.round(0),
+            }
+        )
+        return add_vip_status(df)
+
 
 class SpecializedGenerator(BaseGenerator):
-    """Bayesian-inspired generation using a Multivariate Normal (Copula-lite)."""
+    """Generate correlated VIP customer features using a multivariate normal core."""
+
     def generate(self, samples: int, **kwargs) -> pd.DataFrame:
-        mean = [0, 5]
-        cov = [[1, 0.8], [0.8, 1]]  # High correlation between features
-        data = np.random.multivariate_normal(mean, cov, samples)
-        return pd.DataFrame(data, columns=['feature_a', 'feature_b'])
+        random_state = kwargs.get("random_state")
+        rng = np.random.default_rng(random_state)
+        mean = np.array([720, 12, 90])
+        cov = np.array(
+            [
+                [50**2, 20, 900],
+                [20, 4**2, 12],
+                [900, 12, 45**2],
+            ]
+        )
+        raw = rng.multivariate_normal(mean, cov, samples)
+        df = pd.DataFrame(
+            {
+                "credit_score": np.clip(raw[:, 0], 300, 850).round(0),
+                "frequency": np.clip(raw[:, 1], 0, None).round(0),
+                "avg_transaction": np.clip(raw[:, 2], 5, None).round(2),
+            }
+        )
+        return add_vip_status(df[["avg_transaction", "frequency", "credit_score"]])
+
 
 class GANGenerator(BaseGenerator):
-    """
-    Simplified GAN Wrapper. In a production environment, this would load a 
-    PyTorch/TF model. Here, it simulates the learned distribution.
-    """
+    """Lightweight GAN-style simulator that preserves business-facing columns."""
+
     def generate(self, samples: int, **kwargs) -> pd.DataFrame:
-        # Simulating a GAN by adding structured noise to a latent manifold
-        latent = np.random.randn(samples, 2)
-        transformation = np.array([[1.2, 0.5], [0.1, 0.9]])
-        data = np.dot(latent, transformation) + 0.5
-        return pd.DataFrame(data, columns=['feature_a', 'feature_b'])
+        random_state = kwargs.get("random_state")
+        rng = np.random.default_rng(random_state)
+        latent = rng.normal(size=(samples, 3))
+        transformation = np.array(
+            [
+                [45, 2.0, 75],
+                [10, 1.5, 25],
+                [25, 0.8, 40],
+            ]
+        )
+        generated = latent @ transformation + np.array([120, 11, 705])
+        df = pd.DataFrame(
+            {
+                "avg_transaction": np.clip(generated[:, 0], 5, None).round(2),
+                "frequency": np.clip(generated[:, 1], 0, None).round(0),
+                "credit_score": np.clip(generated[:, 2], 300, 850).round(0),
+            }
+        )
+        return add_vip_status(df)
+
 
 def get_generator(method: str) -> BaseGenerator:
     mapping = {
-        'random': RandomGenerator(),
-        'specialized': SpecializedGenerator(),
-        'gan': GANGenerator()
+        "random": RandomGenerator(),
+        "specialized": SpecializedGenerator(),
+        "gan": GANGenerator(),
     }
-    return mapping.get(method.lower())
+    generator = mapping.get(method.lower())
+    if generator is None:
+        raise ValueError(f"Unknown generation method: {method}")
+    return generator
