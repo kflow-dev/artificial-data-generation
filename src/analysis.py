@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import numpy as np
 import pandas as pd
 import pymc as pm
@@ -32,7 +34,7 @@ def calculate_kl_divergence(p: np.ndarray, q: np.ndarray, bins: int = 30) -> flo
 
 
 def recover_parameters(data: pd.DataFrame, column: str | None = None):
-    """Recover posterior mean and scale for a selected dataframe column."""
+    """Recover posterior mean and scale for a selected dataframe column using PyMC."""
     target_column = column or data.columns[0]
     observed = data[target_column].dropna().astype(float)
     prior_mean = float(observed.mean()) if len(observed) else 0.0
@@ -42,5 +44,27 @@ def recover_parameters(data: pd.DataFrame, column: str | None = None):
         mu = pm.Normal("mu", mu=prior_mean, sigma=prior_sigma * 2)
         sigma = pm.HalfNormal("sigma", sigma=prior_sigma)
         pm.Normal("obs", mu=mu, sigma=sigma, observed=observed)
-        trace = pm.sample(500, tune=500, chains=2, progressbar=False)
+        trace = pm.sample(500, tune=500, chains=2, target_accept=0.9, progressbar=False)
         return trace
+
+
+def bayesian_fidelity_report(real: pd.DataFrame, synthetic: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    """Combine divergence metrics with posterior mean recovery across business columns."""
+    rows = []
+    for column in columns:
+        real_values = real[column].dropna().astype(float).to_numpy()
+        synthetic_values = synthetic[column].dropna().astype(float).to_numpy()
+        if len(real_values) == 0 or len(synthetic_values) == 0:
+            continue
+        trace = recover_parameters(synthetic[[column]], column=column)
+        posterior_mean = float(trace.posterior["mu"].mean())
+        rows.append(
+            {
+                "column": column,
+                "real_mean": float(real_values.mean()),
+                "synthetic_mean": float(synthetic_values.mean()),
+                "posterior_mean": posterior_mean,
+                "kl_divergence": calculate_kl_divergence(real_values, synthetic_values),
+            }
+        )
+    return pd.DataFrame(rows)

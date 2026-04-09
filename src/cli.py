@@ -14,6 +14,7 @@ from .workflows import (
     ensure_parent_dir,
     impute_vip_data,
     run_generation_workflow,
+    analyze_and_log_experiment,
 )
 
 
@@ -28,10 +29,13 @@ def cli():
 @click.option("--samples", default=1000, type=int)
 @click.option("--output", default="data/synthetic/data.csv")
 @click.option("--random-state", default=42, type=int)
-def generate(method, samples, output, random_state):
+@click.option("--seed-data", default=None, help="Optional CSV used to condition advanced generators.")
+@click.option("--epochs", default=200, type=int, show_default=True)
+def generate(method, samples, output, random_state, seed_data, epochs):
     """Generate synthetic VIP customer data using a specified engine."""
     gen = get_generator(method)
-    df = gen.generate(samples, random_state=random_state)
+    seed_df = pd.read_csv(seed_data) if seed_data else None
+    df = gen.generate(samples, random_state=random_state, seed_df=seed_df, epochs=epochs)
     output_path = ensure_parent_dir(output)
     df.to_csv(output_path, index=False)
     click.echo(f"✅ Generated {samples} VIP records using {method}; saved to {output_path}")
@@ -74,8 +78,11 @@ def impute(input_path, output):
 @click.option("--synth", required=True)
 @click.option("--column", default="avg_transaction", show_default=True)
 @click.option("--plot-output", default="data/synthetic/comparison.png", show_default=True)
-def analyze(real, synth, column, plot_output):
-    """Perform fidelity analysis and Bayesian recovery for a chosen column."""
+@click.option("--experiment-dir", default="experiments/latest", show_default=True)
+@click.option("--tracking-uri", default=None, help="Optional MLflow tracking URI.")
+@click.option("--experiment-name", default="artificial-data-generation", show_default=True)
+def analyze(real, synth, column, plot_output, experiment_dir, tracking_uri, experiment_name):
+    """Perform fidelity analysis, create plots, and persist experiment artifacts with MLflow."""
     df_r = pd.read_csv(real)
     df_s = pd.read_csv(synth)
 
@@ -93,7 +100,16 @@ def analyze(real, synth, column, plot_output):
 
     plot_path = ensure_parent_dir(plot_output)
     plot_comparison(df_r, df_s, str(plot_path), column=column)
+    analyze_and_log_experiment(
+        real=df_r,
+        synthetic=df_s,
+        output_dir=experiment_dir,
+        tracking_uri=tracking_uri,
+        experiment_name=experiment_name,
+        run_name=f"analyze-{column}",
+    )
     click.echo(f"🖼️ Comparison plot saved to {plot_path}")
+    click.echo(f"📁 Experiment artifacts saved under {experiment_dir}")
 
 
 NOTEBOOKS = [

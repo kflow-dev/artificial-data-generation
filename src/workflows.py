@@ -6,8 +6,10 @@ from typing import Dict, Iterable
 import numpy as np
 import pandas as pd
 
-from .analysis import calculate_kl_divergence
+from .analysis import bayesian_fidelity_report, calculate_kl_divergence
+from .experiments import configure_tracking, log_dataframe_artifact, log_metrics, log_params
 from .processing import bayesian_impute, introduce_nans
+from .viz import plot_comparison, plot_correlation_heatmap
 
 
 VIP_COLUMNS = ["avg_transaction", "frequency", "credit_score"]
@@ -32,7 +34,6 @@ def add_vip_status(df: pd.DataFrame, threshold: float = 1.4) -> pd.DataFrame:
 def create_vip_seed_data(samples: int = 1000, random_state: int | None = DEFAULT_RANDOM_STATE) -> pd.DataFrame:
     """Create a realistic seed dataset for high-value customer simulations."""
     rng = _rng(random_state)
-
     credit_score = np.clip(rng.normal(loc=720, scale=55, size=samples), 300, 850)
     frequency = rng.poisson(lam=12, size=samples)
     avg_transaction = np.clip(
@@ -40,7 +41,6 @@ def create_vip_seed_data(samples: int = 1000, random_state: int | None = DEFAULT
         5,
         None,
     )
-
     seed = pd.DataFrame(
         {
             "avg_transaction": avg_transaction.round(2),
@@ -90,13 +90,11 @@ def impute_vip_data(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def summarize_dataset(df: pd.DataFrame) -> pd.DataFrame:
-    """Return a compact descriptive summary for notebook display."""
     cols = [c for c in [*VIP_COLUMNS, "vip_status"] if c in df.columns]
     return df[cols].describe(include="all").T
 
 
 def compare_numeric_columns(real: pd.DataFrame, synthetic: pd.DataFrame, columns: Iterable[str] | None = None) -> pd.DataFrame:
-    """Compute simple comparison metrics for shared numeric business columns."""
     if columns is None:
         columns = [c for c in VIP_COLUMNS if c in real.columns and c in synthetic.columns]
 
@@ -136,7 +134,6 @@ def run_generation_workflow(
     raw_output: str | Path | None = None,
     checkpoint_output: str | Path | None = None,
 ) -> Dict[str, pd.DataFrame]:
-    """Create seed and corrupted datasets used by the notebooks and CLI."""
     raw = create_vip_seed_data(samples=samples, random_state=random_state)
     checkpoint = create_corrupted_vip_data(raw, random_state=random_state)
 
@@ -146,3 +143,53 @@ def run_generation_workflow(
         save_dataset(checkpoint, checkpoint_output)
 
     return {"raw": raw, "checkpoint": checkpoint}
+
+
+def analyze_and_log_experiment(
+    real: pd.DataFrame,
+    synthetic: pd.DataFrame,
+    output_dir: str | Path,
+    tracking_uri: str | None = None,
+    experiment_name: str = "artificial-data-generation",
+    run_name: str | None = None,
+) -> pd.DataFrame:
+    """Persist metrics, comparison tables, and plots to MLflow and structured output folders."""
+    mlflow = configure_tracking(tracking_uri=tracking_uri, experiment_name=experiment_name)
+    output_dir = Path(output_dir)
+    plots_dir = output_dir / "plots"
+    tables_dir = output_dir / "tables"
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    tables_dir.mkdir(parents=True, exist_ok=True)
+
+    with mlflow.start_run(run_name=run_name):
+        log_params({"rows_real": len(real), "rows_synthetic": len(synthetic)})
+        comparison = compare_numeric_columns(real, synthetic)
+        fidelity = bayesian_fidelity_report(real, synthetic, VIP_COLUMNS)
+
+        log_dataframe_artifact(comparison, tables_dir / "comparison_metrics.csv", artifact_path="tables")
+        log_dataframe_artifact(fidelity, tables_dir / "bayesian_fidelity.csv", artifact_path="tables")
+
+        for _, row in comparison.iterrows():
+            log_metrics(
+                {
+                    "real_mean": row["real_mean"],
+                    "synthetic_mean": row["synthetic_mean"],
+                    "mean_delta": row["mean_delta"],
+                    "kl_divergence": row["kl_divergence"],
+                },
+                prefix=str(row["column"]),
+            )
+
+        for column in VIP_COLUMNS:
+            plot_comparison(real, synthetic, plots_dir / f"{column}_comparison.png", column=column)
+        plot_correlation_heatmap(real[VIP_COLUMNS + ["vip_status"]], plots_dir / "real_correlation.png", "Real Correlation")
+        plot_correlation_heatmap(
+            synthetic[VIP_COLUMNS + ["vip_status"]],
+            plots_dir / "synthetic_correlation.png",
+            "Synthetic Correlation",
+        )
+
+        for artifact in plots_dir.glob("*.png"):
+            mlflow.log_artifact(str(artifact), artifact_path="plots")
+
+    return comparison
